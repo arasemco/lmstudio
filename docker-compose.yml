@@ -1,0 +1,7 @@
+services:
+  gui:
+    build: .
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
