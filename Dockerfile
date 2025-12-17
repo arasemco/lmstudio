@@ -8,12 +8,16 @@ RUN curl -L "https://installers.lmstudio.ai/linux/x64/${LMSTUDIO_VERSION}/LM-Stu
     -o lmstudio.AppImage && \
     chmod +x lmstudio.AppImage && \
     ./lmstudio.AppImage --appimage-extract && \
-    chown -R 1000:1000 /build/squashfs-root
+    chown -R 0 /build/squashfs-root && \
+    chgrp -R 911 /build/squashfs-root && \
+    chmod -R g=u /build/squashfs-root
 
 
 FROM debian:stable-slim
 
 COPY --from=lmstudio-builder /build/squashfs-root /opt/lmstudio
+RUN ln -s /opt/lmstudio/lm-studio /usr/local/bin/lm-studio
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:99
 ENV PUID=1000
@@ -21,7 +25,7 @@ ENV PGID=1000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
-    openbox \
+    openbox wmctrl \
     x11vnc \
     novnc websockify \
     openrc \
@@ -35,10 +39,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       /var/log/* \
       /tmp/*
 
-RUN echo "DISPLAY=${DISPLAY}" >> /etc/environment \
-    && echo 'rc_controller_cgroups=no' >> /etc/rc.conf \
-    && echo 'rc_cgroup_mode=legacy' >> /etc/rc.conf
+RUN groupadd -g ${PGID} lms && \
+    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash lms && \
+    groupadd -g 911 lmstudio && \
+    usermod -aG lmstudio lms
 
+RUN echo "DISPLAY=${DISPLAY}" >> /etc/environment && \
+    echo "DISPLAY=${DISPLAY}" >> /etc/environment && \
+    echo 'rc_controller_cgroups=no' >> /etc/rc.conf && \
+    echo 'rc_cgroup_mode=legacy' >> /etc/rc.conf
+
+RUN cp /etc/xdg/openbox/menu.xml /var/lib/openbox/debian-menu.xml
 RUN for rl in sysinit boot default shutdown; do rc-update show "$rl" | awk '{print $1}' | xargs -r -I{} rc-update del {} "$rl"; done
 COPY rc-services /etc/init.d
 RUN chmod +x /etc/init.d/* \

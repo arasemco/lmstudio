@@ -28,6 +28,4 @@ else
     useradd -m -u "${PUID}" -g "${PGID}" -s /bin/bash "${APP_USER}"
 fi
 
-cp /etc/xdg/openbox/menu.xml /var/lib/openbox/debian-menu.xml
-
 exec "$@"

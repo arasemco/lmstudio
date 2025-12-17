@@ -32,6 +32,8 @@ start_pre() {
 start_post() {
     ebegin "LM Studio started on ${DISPLAY}"
     sleep 2
+    #DISPLAY=:99 wmctrl -r "LM Studio" -b add,maximized_vert,maximized_horz
+    DISPLAY=:99 wmctrl -r "LM Studio" -b add,fullscreen
     eend 0
 }
 
