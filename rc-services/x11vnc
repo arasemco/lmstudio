@@ -1,0 +1,37 @@
+#!/sbin/openrc-run
+
+name="x11vnc"
+description="VNC server for existing X display"
+
+command="/usr/bin/x11vnc"
+command_args="-display :99 -forever -shared -rfbport 5900 -nopw -nolookup"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+command_user="lms:lms"
+
+export DISPLAY=":99"
+
+log_dir="/var/log/x11vnc"
+output_log="${log_dir}/x11vnc.log"
+error_log="${log_dir}/x11vnc.err"
+
+depend() {
+    need xvfb
+    after xvfb
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    checkpath --directory --mode 0755 --owner lms:lms "${log_dir}"
+}
+
+start_post() {
+    ebegin "x11vnc started on ${DISPLAY}"
+    eend 0
+}
+
+stop_post() {
+    ebegin "x11vnc stopped"
+    eend 0
+}

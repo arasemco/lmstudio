@@ -1,0 +1,35 @@
+#!/sbin/openrc-run
+
+name="novnc"
+description="noVNC HTML5 VNC client via websockify"
+
+command="/usr/bin/websockify"
+command_args="--web /usr/share/novnc 6080 localhost:5900"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+command_user="lms:lms"
+
+log_dir="/var/log/novnc"
+output_log="${log_dir}/novnc.log"
+error_log="${log_dir}/novnc.err"
+
+depend() {
+    need x11vnc
+    after x11vnc
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    checkpath --directory --mode 0755 --owner lms:lms "${log_dir}"
+}
+
+start_post() {
+    ebegin "noVNC started on http://0.0.0.0:6080"
+    eend 0
+}
+
+stop_post() {
+    ebegin "noVNC stopped"
+    eend 0
+}

@@ -1,0 +1,34 @@
+#!/sbin/openrc-run
+
+name="lmstudio-headless"
+description="LM Studio headless server"
+
+command="/home/lms/.lmstudio/bin/lms"
+command_args="server start"
+command_user="lms:lms"
+
+oneshot="yes"
+
+depend() {
+    need lmstudio
+    after lmstudio
+}
+
+stop() {
+    start-stop-daemon --user lms --exec /home/lms/.lmstudio/bin/lms -- server stop
+    return 0
+}
+
+status() {
+    start-stop-daemon --user lms --exec /home/lms/.lmstudio/bin/lms -- server status
+}
+
+start_post() {
+    ebegin "LM Studio headless server started"
+    eend 0
+}
+
+stop_post() {
+    ebegin "LM Studio headless server stopped"
+    eend 0
+}

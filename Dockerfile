@@ -8,52 +8,49 @@ RUN curl -L "https://installers.lmstudio.ai/linux/x64/${LMSTUDIO_VERSION}/LM-Stu
     -o lmstudio.AppImage && \
     chmod +x lmstudio.AppImage && \
     ./lmstudio.AppImage --appimage-extract && \
-    ls /build/squashfs-root
+    chown -R 1000:1000 /build/squashfs-root
 
 
-FROM ubuntu:22.04
+FROM debian:stable-slim
 
 COPY --from=lmstudio-builder /build/squashfs-root /opt/lmstudio
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:0
+ENV DISPLAY=:99
 ENV PUID=1000
 ENV PGID=1000
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     openbox \
     x11vnc \
     novnc websockify \
-    supervisor \
+    openrc \
     dbus \
     dbus-x11 \
-    xterm \
     libnspr4 \
     libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
+    libgtk-3-0 \
     libasound2 \
-    libxshmfence1 \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*  \
+      /var/log/* \
+      /tmp/*
 
-RUN mkdir -p /var/log/supervisor
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN echo "DISPLAY=${DISPLAY}" >> /etc/environment \
+    && echo 'rc_controller_cgroups=no' >> /etc/rc.conf \
+    && echo 'rc_cgroup_mode=legacy' >> /etc/rc.conf
+
+RUN for rl in sysinit boot default shutdown; do rc-update show "$rl" | awk '{print $1}' | xargs -r -I{} rc-update del {} "$rl"; done
+COPY rc-services /etc/init.d
+RUN chmod +x /etc/init.d/* \
+    && rc-update add novnc default \
+    && rc-update add lmstudio-headless default
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-RUN mkdir -p /run/dbus && \
-    dbus-uuidgen --ensure
-
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["/usr/bin/supervisord", "-n"]
+CMD ["/sbin/openrc-init"]
 
 # ports
 EXPOSE 1234 5900 6080
+WORKDIR /root

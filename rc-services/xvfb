@@ -1,0 +1,32 @@
+#!/sbin/openrc-run
+
+name="Xvfb"
+description="Virtual framebuffer X server"
+
+command="/usr/bin/Xvfb"
+command_args=":99 -screen 0 1280x800x24 -nolisten tcp"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+command_user="lms:lms"
+
+export DISPLAY=":99"
+
+log_dir="/var/log/xvfb"
+output_log="${log_dir}/xvfb.log"
+error_log="${log_dir}/xvfb.err"
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    checkpath --directory --mode 0755 --owner lms:lms "${log_dir}"
+}
+
+start_post() {
+    ebegin "Xvfb started on ${DISPLAY}"
+    eend 0
+}
+
+stop_post() {
+    ebegin "Xvfb stopped"
+    eend 0
+}

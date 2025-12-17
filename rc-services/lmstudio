@@ -1,0 +1,41 @@
+#!/sbin/openrc-run
+
+name="lmstudio"
+description="LM Studio GUI application"
+
+command="/opt/lmstudio/lm-studio"
+command_args="--no-sandbox"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+supervisor="supervise-daemon"
+respawn_delay=5
+respawn_max=5
+
+command_user="lms:lms"
+
+export DISPLAY=":99"
+
+log_dir="/var/log/lmstudio"
+output_log="${log_dir}/lmstudio.log"
+error_log="${log_dir}/lmstudio.err"
+
+depend() {
+    need xvfb dbus openbox
+    after xvfb dbus openbox
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    checkpath --directory --mode 0755 --owner lms:lms "${log_dir}"
+}
+
+start_post() {
+    ebegin "LM Studio started on ${DISPLAY}"
+    sleep 2
+    eend 0
+}
+
+stop_post() {
+    ebegin "LM Studio stopped"
+    eend 0
+}
