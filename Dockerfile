@@ -1,73 +1,151 @@
-FROM ubuntu:22.04 AS lmstudio-builder
+########################################################################################################################
+FROM ghcr.io/linuxserver/baseimage-selkies:ubuntunoble AS lmstudio
+LABEL maintainer="asemo"
 
+# title
+ENV TITLE="LM Studio" \
+    NO_GAMEPAD=true
+
+# Update
+RUN apt-get update && apt-get upgrade -y
+
+# set version & label
 ARG LMSTUDIO_VERSION=0.3.35-1
-RUN apt-get update && apt-get install -y curl
+LABEL lm-studio-version="${LMSTUDIO_VERSION}"
 
+# Building
 WORKDIR /build
 RUN curl -L "https://installers.lmstudio.ai/linux/x64/${LMSTUDIO_VERSION}/LM-Studio-${LMSTUDIO_VERSION}-x64.AppImage" \
     -o lmstudio.AppImage && \
     chmod +x lmstudio.AppImage && \
     ./lmstudio.AppImage --appimage-extract && \
-    chown -R 0 /build/squashfs-root && \
-    chgrp -R 911 /build/squashfs-root && \
-    chmod -R g=u /build/squashfs-root
+    mkdir -p /config/app && \
+    mv /build/squashfs-root /config/app/lmstudio && \
+    chown -R abc:abc /config/app
+
+# Cleanup
+RUN echo "**** cleanup ****" && \
+    apt-get auto-remove && \
+    apt-get autoclean && \
+    rm -rf  \
+      /build \
+      /config/.cache \
+      /config/.launchpadlib \
+      /var/lib/apt/lists/* \
+      /var/tmp/* \
+      /tmp/*
+
+# Customizing
+RUN cp /config/app/lmstudio/lm-studio.png /usr/share/selkies/www/icon.png
+RUN mkdir -p /defaults \ && printf '%s\n#!/bin/bash\n\necho "launching by s6 service manager"' > /defaults/autostart
+
+# s6 service gui app
+RUN mkdir -p /etc/services.d/lmstudio
+RUN cat > /etc/services.d/lmstudio/run <<'EOF'
+#!/bin/bash
+
+export USER=abc
+export HOME=/config
+export DISPLAY=:1
+export XAUTHORITY=/config/.Xauthority
+
+while [ ! -S /tmp/.X11-unix/X1 ]
+do sleep 0.5
+done
+
+chown -R abc:abc /config/app
+exec s6-setuidgid abc /config/app/lmstudio/lm-studio --no-sandbox %U
+EOF
+RUN chmod +x /etc/services.d/lmstudio/run
+
+# s6 service headless serving
+RUN mkdir -p /etc/services.d/lms
+RUN cat > /etc/services.d/lms/run <<'EOF'
+#!/bin/bash
+
+export USER=abc
+export HOME=/config
+
+while [ ! -S /tmp/.X11-unix/X1 ]
+do sleep 0.5
+done
+
+while [ ! -x /config/.lmstudio/bin/lms ]
+do sleep 1
+done
+
+sleep 5
+s6-setuidgid abc /config/.lmstudio/bin/lms daemon up
+s6-setuidgid abc /config/.lmstudio/bin/lms server start
+
+#s6-setuidgid abc /config/.lmstudio/bin/lms get openai/gpt-oss-20b --yes
+s6-setuidgid abc /config/.lmstudio/bin/lms get nomic-embed-text-v1.5-GGUF@Q8_0 --yes
+s6-setuidgid abc /config/.lmstudio/bin/lms load nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q8_0.gguf --identifier text-embedding-nomic-embed-text-v1.5@q8_0
+
+exec s6-setuidgid abc /config/.lmstudio/bin/lms log stream
+EOF
+RUN chmod +x /etc/services.d/lms/run
+
+# ports and volumes
+#      API  WebUI
+EXPOSE 1234 3000
+WORKDIR /config
 
 
-FROM debian:stable-slim
+########################################################################################################################
+FROM debian:bookworm-slim AS llmster
 
-COPY --from=lmstudio-builder /build/squashfs-root /opt/lmstudio
-RUN ln -s /opt/lmstudio/lm-studio /usr/local/bin/lm-studio
+# system deps required by lmstudio/llmster headless mode
+RUN apt-get update && \
+    apt-get install -y curl ca-certificates libgomp1 libvulkan1 vulkan-tools && \
+    rm -rf /var/lib/apt/lists/*
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:99
-ENV PUID=1000
-ENV PGID=1000
+# create non-root user
+RUN useradd -m -s /bin/bash lmstudio
+USER lmstudio
+WORKDIR /home/lmstudio
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        xvfb \
-        openbox wmctrl \
-        x11vnc \
-        novnc websockify \
-        openrc \
-        dbus \
-        dbus-x11 \
-        libnspr4 \
-        libnss3 \
-        libgtk-3-0 \
-        libasound2 \
-    && rm -rf \
-        /var/lib/apt/lists/*  \
-        /var/log/* \
-        /tmp/*
+# install lmstudio as non-root
+RUN curl -fsSL https://lmstudio.ai/install.sh | bash
 
-RUN groupadd -g ${PGID} lms && \
-    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash lms && \
-    groupadd -g 911 lmstudio && \
-    usermod -aG lmstudio lms
+# installer places binaries in ~/.local/bin
+ENV PATH="/home/lmstudio/.local/bin:${PATH}"
+ENV PATH="/home/lmstudio/.lmstudio/bin:${PATH}"
 
-RUN echo "DISPLAY=${DISPLAY}" >> /etc/environment && \
-    echo 'rc_controller_cgroups=no' >> /etc/rc.conf && \
-    echo 'rc_cgroup_mode=legacy' >> /etc/rc.conf
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -sf http://127.0.0.1:1234/v1/models || exit 1
 
-RUN cp /etc/xdg/openbox/menu.xml /var/lib/openbox/debian-menu.xml
-RUN sed -i \
-    -e 's/^#rc_sys=.*/rc_sys="docker"/' \
-    -e 's/^#rc_logger=.*/rc_logger="NO"/' \
-    /etc/rc.conf && \
-    echo 'rc_provide="loopback net"' >> /etc/rc.conf
-RUN for rl in sysinit boot default shutdown; do rc-update show "$rl" | awk '{print $1}' | xargs -r -I{} rc-update del {} "$rl"; done
-COPY rc-services /etc/init.d
-RUN chmod +x /etc/init.d/* \
-    && rc-update add novnc default \
-    && rc-update add lmstudio-headless default
+RUN cat > /home/lmstudio/start.sh <<'EOF'
+#!/usr/bin/env bash
+set -e
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+echo "[lmstudio] starting daemon"
+lms daemon up
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["/sbin/openrc-init"]
+echo "[lmstudio] starting server on :1234"
+lms server start --bind 0.0.0.0 --port 1234
 
-# ports
-#      API  VNC  noVNC
-EXPOSE 1234 5900 6080
-WORKDIR /root
+echo "[lmstudio] checking embedding model availability"
+#if ! lms ls --embedding | grep -q 'text-embedding-nomic-embed-text-v1.5@q8_0'
+if ! ls /home/lmstudio/.lmstudio/models/nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q8_0.gguf 1>/dev/null 2>&1
+then
+  echo "[lmstudio] embedding model not found, waiting for registry bootstrap"
+  sleep 16
+  echo "[lmstudio] downloading embedding model"
+  lms get --yes "nomic-ai nomic-embed-text-v1.5-GGUF@Q8_0"
+else
+  echo "[lmstudio] embedding model already present"
+fi
+
+echo "[lmstudio] loading embedding model"
+lms load nomic-ai/nomic-embed-text-v1.5-GGUF/nomic-embed-text-v1.5.Q8_0.gguf \
+  --identifier text-embedding-nomic-embed-text-v1.5@q8_0
+
+echo "[lmstudio] initialization complete, streaming logs"
+exec lms log stream
+EOF
+RUN chmod +x /home/lmstudio/start.sh
+
+#      API
+EXPOSE 1234
+CMD ["/home/lmstudio/start.sh"]

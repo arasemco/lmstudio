@@ -1,9 +1,23 @@
+# Example use one of them, headless or WebUI (headless included).
+# Is support GPU too, for that you have to pass it here.
 services:
   lmstudio:
-    build: .
+    hostname: lmstudio
+    container_name: lmstudio
+    build:
+      target: lmstudio
+      pull: true
+      args:
+        LMSTUDIO_VERSION: "0.4.1-1"
     ports:
-      - "1235:1234"
-      - "6080:6080"
-    tmpfs:
-      - /run:rw,nosuid,nodev,noexec
-      - /run/lock:rw,nosuid,nodev,noexec
+      - "1234:1234"
+      - "3000:3000"
+
+  llmster:
+    hostname: llmster
+    container_name: llmster
+    build:
+      target: llmster
+      pull: true
+    ports:
+      - "1234:1234"
