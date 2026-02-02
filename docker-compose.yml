@@ -1,7 +1,9 @@
 services:
-  gui:
+  lmstudio:
     build: .
     ports:
+      - "1235:1234"
       - "6080:6080"
-    volumes:
-      - ./supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
+    tmpfs:
+      - /run:rw,nosuid,nodev,noexec
+      - /run/lock:rw,nosuid,nodev,noexec
