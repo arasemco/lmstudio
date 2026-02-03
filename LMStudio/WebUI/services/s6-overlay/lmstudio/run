@@ -1,0 +1,8 @@
+#!/bin/bash
+
+export USER=abc
+export HOME=/config
+export DISPLAY=:1
+export XAUTHORITY=${HOME}/.Xauthority
+
+exec s6-setuidgid ${USER} ${HOME}/app/lmstudio/lm-studio --no-sandbox

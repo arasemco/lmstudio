@@ -1,23 +1,28 @@
 # Example use one of them, headless or WebUI (headless included).
 # Is support GPU too, for that you have to pass it here.
+
 services:
   lmstudio:
     hostname: lmstudio
     container_name: lmstudio
     build:
-      target: lmstudio
+      context: LMStudio/WebUI
       pull: true
       args:
         LMSTUDIO_VERSION: "0.4.1-1"
     ports:
       - "1234:1234"
       - "3000:3000"
+    volumes:
+      - ./data/lmstudio:/config/.lmstudio/models
 
   llmster:
     hostname: llmster
     container_name: llmster
     build:
-      target: llmster
+      context: LMStudio/Headless
       pull: true
     ports:
       - "1234:1234"
+    volumes:
+      - ./data/llmster:/home/lms/.lmstudio/models

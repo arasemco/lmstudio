@@ -1,0 +1,2 @@
+#!/bin/bash
+echo "launching by s6 service manager"

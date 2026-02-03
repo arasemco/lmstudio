@@ -1,0 +1,33 @@
+#!/bin/bash
+set -e
+
+USER_NAME=abc
+HOME_DIR=/config
+LM_HOME="${HOME_DIR}/.lmstudio"
+LM_BIN="${LM_HOME}/bin/lms"
+MODEL_NS="nomic-ai/nomic-embed-text-v1.5-GGUF"
+MODEL_FILE="nomic-embed-text-v1.5.Q8_0.gguf"
+MODEL_PATH="${LM_HOME}/models/${MODEL_NS}/${MODEL_FILE}"
+MODEL_ID="text-embedding-nomic-embed-text-v1.5@q8_0"
+BIND_ADDR="0.0.0.0"
+PORT=1234
+
+export USER="${USER_NAME}"
+export HOME="${HOME_DIR}"
+export DISPLAY=":1"
+export XAUTHORITY="${HOME}/.Xauthority"
+export PATH="${LM_HOME}/bin:${PATH}"
+
+while [ ! -x "${LM_BIN}" ]; do sleep 1; done
+
+s6-setuidgid "${USER_NAME}" "${LM_BIN}" daemon up
+s6-setuidgid "${USER_NAME}" "${LM_BIN}" server start --bind "${BIND_ADDR}" --port "${PORT}"
+
+if [ ! -f "${MODEL_PATH}" ]; then
+    sleep 5
+    s6-setuidgid "${USER_NAME}" "${LM_BIN}" get --yes "nomic-ai nomic-embed-text-v1.5-GGUF@Q8_0"
+fi
+
+s6-setuidgid "${USER_NAME}" "${LM_BIN}" load "${MODEL_NS}/${MODEL_FILE}" --identifier "${MODEL_ID}"
+
+exec s6-setuidgid "${USER_NAME}" "${LM_BIN}" log stream
